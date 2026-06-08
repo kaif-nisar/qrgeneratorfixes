@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#102542">
+  <meta name="description" content="Cloudflare R2 PDF QR manager for static hosting. Upload PDFs, generate QR codes, and manage files from GitHub Pages.">
+  <title>QR R2 File Manager</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23102542'/%3E%3Cpath d='M18 14h28a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H18a8 8 0 0 1-8-8V22a8 8 0 0 1 8-8Z' fill='%23fff' opacity='.14'/%3E%3Crect x='14' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='36' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='40' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='14' y='36' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='40' width='6' height='6' rx='1' fill='%23102542'/%3E%3Cpath d='M38 38h6v6h-6zm8 0h6v6h-6zm-8 8h6v6h-6zm8 0h6v6h-6z' fill='%23f59e0b'/%3E%3C/svg%3E">
+  <script>
+    (function () {
+      try {
+        const search = window.location.search.replace(/^\?/, "");
+        if (!search) return;
+        const params = new URLSearchParams(search);
+        const rawKey = params.get("k");
+        if (!rawKey) return;
+        const publicBaseUrl = "https://pub-498a9ccddb9a499d8e4ad76235fda6c0.r2.dev";
+        const target = new URL(rawKey, `${publicBaseUrl.replace(/\/+$/, "")}/`);
+        if (target.protocol === "http:" || target.protocol === "https:") {
+          window.location.replace(target.toString());
+        }
+      } catch {
+        /* ignore malformed scan routes */
+      }
+    })();
+  </script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: radial-gradient(circle at top left, #c7d2fe 0%, #eff6ff 36%, #ecfeff 68%, #fef3c7 100%);
+      --surface: rgba(255, 255, 255, 0.82);
+      --surface-strong: rgba(255, 255, 255, 0.94);
+      --surface-soft: rgba(255, 255, 255, 0.62);
+      --border: rgba(148, 163, 184, 0.22);
+      --text: #102542;
+      --muted: #475569;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --accent-soft: rgba(15, 118, 110, 0.12);
+      --warning: #b45309;
+      --danger: #b91c1c;
+      --success: #15803d;
+      --shadow: 0 20px 44px rgba(15, 23, 42, 0.14);
+      --shadow-soft: 0 12px 28px rgba(15, 23, 42, 0.08);
+      --ring: rgba(15, 118, 110, 0.18);
+    }
+
+    body.dark {
+      --bg: radial-gradient(circle at top left, #1e293b 0%, #0f172a 45%, #020617 100%);
+      --surface: rgba(15, 23, 42, 0.8);
+      --surface-strong: rgba(15, 23, 42, 0.92);
+      --surface-soft: rgba(15, 23, 42, 0.55);
+      --border: rgba(148, 163, 184, 0.15);
+      --text: #e5eef9;
+      --muted: #94a3b8;
+      --accent: #5eead4;
+      --accent-strong: #99f6e4;
+      --accent-soft: rgba(94, 234, 212, 0.12);
+      --warning: #f59e0b;
+      --danger: #f87171;
+      --success: #4ade80;
+      --shadow: 0 24px 52px rgba(2, 6, 23, 0.45);
+      --shadow-soft: 0 14px 34px rgba(2, 6, 23, 0.28);
+      --ring: rgba(94, 234, 212, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "SF Pro Display", "Helvetica Neue", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(20, 184, 166, 0.16), transparent 30%),
+        radial-gradient(circle at 88% 14%, rgba(245, 158, 11, 0.14), transparent 28%),
+        radial-gradient(circle at 50% 86%, rgba(59, 130, 246, 0.1), transparent 26%);
+      z-index: 0;
+    }
+
+    a,
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .app-shell {
+      position: relative;
+      z-index: 1;
+      width: min(1380px, calc(100% - 1.25rem));
+      margin: 0 auto;
+      padding: 1rem 0 2rem;
+    }
+
+    .topbar,
+    .hero-grid,
+    .main-grid,
+    .stats-grid,
+    .stack,
+    .field-grid,
+    .table-head,
+    .bulk-bar,
+    .inline-actions {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .topbar {
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.95rem;
+    }
+
+    .brand-mark {
+      width: 3.4rem;
+      height: 3.4rem;
+      border-radius: 1rem;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(245, 158, 11, 0.28));
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    .brand h1,
+    .panel-title,
+    .hero-copy h2 {
+      margin: 0;
+    }
+
+    .brand h1 {
+      font-size: clamp(1.35rem, 3vw, 2.15rem);
+      line-height: 1.06;
+    }
+
+    .brand p,
+    .hint,
+    .muted {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-chip,
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.78rem 1rem;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(18px);
+    }
+
+    .theme-toggle {
+      cursor: pointer;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 1rem;
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-grid,
+    .main-grid {
+      grid-template-columns: 1.1fr 0.9fr;
+    }
+
+    .hero-card {
+      margin-bottom: 1rem;
+    }
+
+    .hero-copy,
+    .upload-panel,
+    .config-panel,
+    .qr-panel,
+    .files-panel {
+      display: grid;
+      gap: 1rem;
+      align-content: start;
+    }
+
+    .field-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field-group {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .field-group.wide {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .input,
+    .select {
+      width: 100%;
+      border-radius: 1rem;
+      border: 1px solid transparent;
+      outline: none;
+      padding: 0.95rem 1rem;
+      background: var(--surface-strong);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin: 0.15rem 0 0;
+      accent-color: var(--accent);
+    }
+
+    .input:focus,
+    .select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    .action-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.88rem 1.2rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.58;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      box-shadow: 0 14px 24px rgba(15, 118, 110, 0.24);
+    }
+
+    .secondary {
+      color: var(--text);
+      background: var(--surface-strong);
+      border: 1px solid var(--border);
+    }
+
+    .danger {
+      color: #fff;
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+      box-shadow: 0 14px 24px rgba(185, 28, 28, 0.22);
+    }
+
+    .warning {
+      color: #fff;
+      background: linear-gradient(135deg, #d97706, #b45309);
+      box-shadow: 0 14px 24px rgba(180, 83, 9, 0.22);
+    }
+
+    .inline-actions {
+      grid-auto-flow: column;
+      justify-content: start;
+      gap: 0.75rem;
+    }
+
+    .alert {
+      border-radius: 1.2rem;
+      padding: 0.95rem 1rem;
+      border: 1px solid transparent;
+      background: var(--surface-soft);
+    }
+
+    .alert.info {
+      border-color: rgba(59, 130, 246, 0.16);
+      background: rgba(59, 130, 246, 0.09);
+    }
+
+    .alert.warning {
+      border-color: rgba(217, 119, 6, 0.18);
+      background: rgba(217, 119, 6, 0.12);
+    }
+
+    .alert.success {
+      border-color: rgba(21, 128, 61, 0.18);
+      background: rgba(21, 128, 61, 0.12);
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .stat-card {
+      padding: 1rem;
+      border-radius: 1.3rem;
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .stat-card strong {
+      display: block;
+      font-size: 1.55rem;
+      margin-top: 0.4rem;
+    }
+
+    .qr-result {
+      display: grid;
+      gap: 1rem;
+      min-height: 100%;
+    }
+
+    .qr-card {
+      border-radius: 1.5rem;
+      padding: 1rem;
+      background: #fff;
+      color: #102542;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.14);
+    }
+
+    .qr-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .meta-tag {
+      border-radius: 999px;
+      padding: 0.38rem 0.7rem;
+      background: rgba(15, 118, 110, 0.1);
+      color: #0f766e;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    #qrCodeMount {
+      min-height: 290px;
+      display: grid;
+      place-items: center;
+      border: 1px dashed rgba(15, 118, 110, 0.24);
+      border-radius: 1.25rem;
+      padding: 1rem;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+
+    #qrCodeMount img,
+    #qrCodeMount canvas {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .file-link-box {
+      word-break: break-all;
+      padding: 0.9rem 1rem;
+      border-radius: 1rem;
+      background: var(--surface-strong);
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    .progress-shell {
+      display: none;
+      gap: 0.55rem;
+    }
+
+    .progress-shell.visible {
+      display: grid;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 0.72rem;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.18);
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #38bdf8);
+      transition: width 0.2s ease;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border-radius: 1.25rem;
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+    }
+
+    th,
+    td {
+      padding: 0.9rem 0.85rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      vertical-align: middle;
+    }
+
+    th {
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    tr.active {
+      background: rgba(15, 118, 110, 0.08);
+    }
+
+    .table-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .table-action {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.48rem 0.8rem;
+      cursor: pointer;
+      font-weight: 700;
+      background: var(--surface-strong);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .table-action.danger {
+      background: rgba(220, 38, 38, 0.12);
+      color: var(--danger);
+      border-color: rgba(220, 38, 38, 0.18);
+    }
+
+    .bulk-bar {
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 0.95rem 1rem;
+      border-radius: 1.25rem;
+      background: var(--accent-soft);
+      border: 1px solid rgba(15, 118, 110, 0.12);
+    }
+
+    .empty-state {
+      padding: 2rem 1rem;
+      text-align: center;
+    }
+
+    .code-block {
+      margin: 0;
+      padding: 0.9rem 1rem;
+      border-radius: 1rem;
+      overflow: auto;
+      background: rgba(15, 23, 42, 0.9);
+      color: #e2e8f0;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.88rem;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 30;
+      display: grid;
+      gap: 0.7rem;
+      width: min(360px, calc(100vw - 1.5rem));
+    }
+
+    .toast {
+      padding: 0.95rem 1rem;
+      border-radius: 1rem;
+      box-shadow: var(--shadow);
+      background: var(--surface-strong);
+      border: 1px solid var(--border);
+    }
+
+    .toast.success {
+      border-color: rgba(21, 128, 61, 0.18);
+    }
+
+    .toast.error {
+      border-color: rgba(220, 38, 38, 0.18);
+    }
+
+    .toast.warning {
+      border-color: rgba(217, 119, 6, 0.18);
+    }
+
+    .modal-root.hidden {
+      display: none;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(2, 6, 23, 0.55);
+      backdrop-filter: blur(10px);
+    }
+
+    .modal-card {
+      width: min(520px, 100%);
+      padding: 1rem;
+      border-radius: 1.5rem;
+      background: var(--surface-strong);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    @media (max-width: 1120px) {
+      .hero-grid,
+      .main-grid,
+      .stats-grid,
+      .field-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar,
+      .bulk-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        justify-content: start;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .inline-actions {
+        grid-auto-flow: row;
+      }
+
+      .action-btn,
+      .table-action {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">R2</div>
+        <div>
+          <h1>QR R2 File Manager</h1>
+          <p>Static GitHub Pages app for Cloudflare R2 uploads, public PDF links, QR generation, and bulk delete.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-chip">
+          <span>Status</span>
+          <strong id="connectionStatus">Not connected</strong>
+        </div>
+        <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
+      </div>
+    </header>
+
+    <section class="card hero-card">
+      <div class="hero-grid">
+        <section class="qr-panel">
+          <div class="panel-title">Live QR Preview</div>
+          <div id="qrResult" class="qr-result">
+            <div class="qr-card">
+              <div class="qr-meta">
+                <span id="selectedFileTag" class="meta-tag">No file selected</span>
+                <span id="selectedTypeTag" class="meta-tag">PDF ready mode</span>
+                <span id="timestampTag" class="meta-tag">Awaiting upload</span>
+              </div>
+              <div id="qrCodeMount">
+                <p class="hint">Upload ya select a PDF file to generate QR automatically.</p>
+              </div>
+            </div>
+
+            <div class="file-link-box" id="selectedLinkBox">Public PDF link will appear here.</div>
+
+            <div class="field-group">
+              <label for="qrSizeInput">QR Size (inch)</label>
+              <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.05" value="1">
+              <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
+              <p class="hint">Print-friendly output ke liye 600 DPI basis use ho raha hai. Chhote QR ke liye QR text jitna short hoga, scan utna better hoga.</p>
+            </div>
+
+            <div class="inline-actions">
+              <button id="openLinkBtn" class="action-btn primary" type="button">Open PDF</button>
+              <button id="copyBtn" class="action-btn secondary" type="button">Copy Link</button>
+              <button id="downloadPngBtn" class="action-btn secondary" type="button">Download QR</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card upload-panel">
+          <div class="stack">
+            <div class="panel-title">Upload PDF Or File</div>
+            <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct open mode me serve kiya jayega. Final display browser ke supported format par depend karega.</p>
+          </div>
+
+          <div class="field-group">
+            <label for="fileInput">Choose File</label>
+            <input id="fileInput" class="input" type="file" accept="*/*">
+          </div>
+
+          <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
+            <strong>Drag and drop file here</strong>
+            <p class="hint">Ya phir is box par click karke file choose karo.</p>
+          </div>
+
+          <div class="field-group">
+            <label for="customNameInput">Optional Custom File Name</label>
+            <input id="customNameInput" class="input" type="text" placeholder="leave blank to keep original file name">
+          </div>
+
+          <div class="progress-shell" id="progressShell">
+            <span id="progressText" class="hint">Uploading 0%</span>
+            <div class="progress-track">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
+
+          <div class="inline-actions">
+            <button id="uploadBtn" class="action-btn primary" type="button">Upload To R2</button>
+          </div>
+
+          <div class="alert success">
+            <strong>Client workflow</strong>
+            <p class="hint">Upload ke baad file list refresh hogi, public link banega, aur selected file ka QR automatically generate ho jayega.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <section class="card config-panel">
+        <div class="stack">
+          <div class="panel-title">R2 Connection Ready</div>
+          <p class="hint">Is build me Cloudflare R2 credentials code me fixed hain, isliye user ko koi technical setup karne ki zarurat nahi hai.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="muted">Files Loaded</span>
+            <strong id="filesLoadedStat">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Selected</span>
+            <strong id="selectedCountStat">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Total Size</span>
+            <strong id="storageUsedStat">0 B</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Last Upload</span>
+            <strong id="lastUploadStat">Waiting</strong>
+          </div>
+        </div>
+
+        <div class="alert success">
+          <strong>Bucket</strong>
+          <p class="hint"><code>pdf-storage</code></p>
+        </div>
+
+        <div class="alert info">
+          <strong>Public file base URL</strong>
+          <p class="hint"><code>https://pub-498a9ccddb9a499d8e4ad76235fda6c0.r2.dev</code></p>
+        </div>
+
+        <div class="inline-actions">
+          <button id="refreshBtn" class="action-btn primary" type="button">Refresh Files</button>
+          <button id="openPublicRootBtn" class="action-btn secondary" type="button">Open Public Root</button>
+        </div>
+
+        <div class="alert warning">
+          <strong>Important setup</strong>
+          <p class="hint">R2 bucket par public access ya custom domain enable hona chahiye, aur CORS me <code>*</code> ya tumhara GitHub Pages origin allow hona chahiye.</p>
+        </div>
+
+        <div class="alert info">
+          <strong>Recommended file behavior</strong>
+          <p class="hint">Upload ke waqt files ko available MIME type ke saath <code>Content-Disposition: inline</code> me store kiya jayega, jisse supported image, video, PDF, aur doosri files scan ke baad direct open ho saken.</p>
+        </div>
+      </section>
+    </section>
+
+    <section class="card files-panel" style="margin-top: 1rem;">
+      <div class="table-head">
+        <div>
+          <div class="panel-title">Bucket Files</div>
+          <p class="hint">Selected delete aur bulk delete dono available hain. Public link se QR regenerate bhi kar sakte ho.</p>
+        </div>
+
+        <div class="field-grid">
+          <div class="field-group">
+            <label for="searchInput">Search</label>
+            <input id="searchInput" class="input" type="text" placeholder="search by file name">
+          </div>
+          <div class="field-group">
+            <label for="sortFilter">Sort</label>
+            <select id="sortFilter" class="select">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name-asc">Name A-Z</option>
+              <option value="name-desc">Name Z-A</option>
+              <option value="size-desc">Largest first</option>
+              <option value="size-asc">Smallest first</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="bulk-bar">
+        <div>
+          <strong id="bulkSummary">0 files selected</strong>
+          <p class="hint">Select specific rows or use Select All.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="selectAllBtn" class="action-btn secondary" type="button">Select Visible</button>
+          <button id="clearSelectionBtn" class="action-btn secondary" type="button">Clear Selection</button>
+          <button id="deleteSelectedBtn" class="action-btn danger" type="button">Delete Selected</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 60px;">
+                <input id="masterCheckbox" type="checkbox" aria-label="Select all visible files">
+              </th>
+              <th>File Name</th>
+              <th>Type</th>
+              <th>Size</th>
+              <th>Updated</th>
+              <th>Public Link</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="filesTableBody">
+            <tr>
+              <td colspan="7" class="empty-state">
+                <strong>No files loaded</strong>
+                <p class="hint">Save config, test connection, then refresh files.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 1rem;">
+      <div class="panel-title">CORS Setup For R2</div>
+      <p class="hint" style="margin: 0.45rem 0 1rem;">Cloudflare R2 bucket par is tarah ka CORS rule helpful rahega. Agar page local file se khul raha ho to <code>null</code> origin bhi allow karna useful hota hai.</p>
+      <pre class="code-block">[
+  {
+    "AllowedOrigins": ["*", "null"],
+    "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]</pre>
+    </section>
+  </div>
+
+  <div id="modalRoot" class="modal-root hidden"></div>
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module">
+    import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20?bundle";
+
+    const STORAGE_KEYS = {
+      theme: "qr-r2-theme",
+      selectedFile: "qr-r2-selected-file"
+    };
+
+    const FIXED_R2_CONFIG = {
+      accountId: "0b95c46e2b61d38882501ea05e7c3755",
+      accessKeyId: "7737502f40d7293f7ebffb1bc2069452",
+      secretAccessKey: "b3e27a409aa44e344b4917fa3922b52b575740deefe6a400ea2a2c91a5aff824",
+      bucketName: "pdf-storage",
+      publicBaseUrl: "https://pub-498a9ccddb9a499d8e4ad76235fda6c0.r2.dev",
+      prefix: ""
+    };
+
+    const appState = {
+      files: [],
+      filteredFiles: [],
+      selectedKeys: new Set(),
+      selectedFile: null,
+      awsClient: null,
+      config: { ...FIXED_R2_CONFIG },
+      lastRenderedDataUrl: ""
+    };
+
+    const themeToggle = document.getElementById("themeToggle");
+    const connectionStatus = document.getElementById("connectionStatus");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const customNameInput = document.getElementById("customNameInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const openPublicRootBtn = document.getElementById("openPublicRootBtn");
+    const progressShell = document.getElementById("progressShell");
+    const progressBar = document.getElementById("progressBar");
+    const progressText = document.getElementById("progressText");
+    const qrCodeMount = document.getElementById("qrCodeMount");
+    const selectedFileTag = document.getElementById("selectedFileTag");
+    const selectedTypeTag = document.getElementById("selectedTypeTag");
+    const timestampTag = document.getElementById("timestampTag");
+    const selectedLinkBox = document.getElementById("selectedLinkBox");
+    const qrSizeInput = document.getElementById("qrSizeInput");
+    const qrSizeRange = document.getElementById("qrSizeRange");
+    const openLinkBtn = document.getElementById("openLinkBtn");
+    const copyBtn = document.getElementById("copyBtn");
+    const downloadPngBtn = document.getElementById("downloadPngBtn");
+    const filesLoadedStat = document.getElementById("filesLoadedStat");
+    const selectedCountStat = document.getElementById("selectedCountStat");
+    const storageUsedStat = document.getElementById("storageUsedStat");
+    const lastUploadStat = document.getElementById("lastUploadStat");
+    const searchInput = document.getElementById("searchInput");
+    const sortFilter = document.getElementById("sortFilter");
+    const bulkSummary = document.getElementById("bulkSummary");
+    const selectAllBtn = document.getElementById("selectAllBtn");
+    const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+    const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
+    const masterCheckbox = document.getElementById("masterCheckbox");
+    const filesTableBody = document.getElementById("filesTableBody");
+    const modalRoot = document.getElementById("modalRoot");
+    const toastStack = document.getElementById("toastStack");
+    const QR_EXPORT_DPI = 600;
+    const QR_MIN_INCH = 0.05;
+    const QR_DEFAULT_INCH = 1;
+    const AUTO_OPEN_PARAM = "k";
+
+    function getAppBaseUrl() {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    }
+
+    function buildScanUrl(file) {
+      const url = new URL(getAppBaseUrl());
+      url.search = `${AUTO_OPEN_PARAM}=${encodeURIComponent(file.key)}`;
+      return url.toString();
+    }
+
+    function getAutoOpenTarget() {
+      try {
+        const search = window.location.search.replace(/^\?/, "");
+        if (!search) return "";
+        const params = new URLSearchParams(search);
+        const rawKey = params.get(AUTO_OPEN_PARAM);
+        if (!rawKey) return "";
+        const parsed = new URL(rawKey, `${FIXED_R2_CONFIG.publicBaseUrl.replace(/\/+$/, "")}/`);
+        return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "";
+      } catch {
+        return "";
+      }
+    }
+
+    const AUTO_OPEN_TARGET = getAutoOpenTarget();
+
+    if (AUTO_OPEN_TARGET) {
+      window.location.replace(AUTO_OPEN_TARGET);
+    }
+
+    function readJSON(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function showToast(message, type = "info") {
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      toastStack.appendChild(toast);
+      window.setTimeout(() => {
+        toast.remove();
+      }, 3200);
+    }
+
+    function setTheme(theme) {
+      document.body.classList.toggle("dark", theme === "dark");
+      localStorage.setItem(STORAGE_KEYS.theme, theme);
+    }
+
+
+
+    function initTheme() {
+      const saved = localStorage.getItem(STORAGE_KEYS.theme) || "light";
+      setTheme(saved);
+    }
+
+    function writeJSON(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function normalizeBaseUrl(url) {
+      return (url || "").trim().replace(/\/+$/, "");
+    }
+
+    function normalizePrefix(prefix) {
+      return (prefix || "").trim().replace(/^\/+|\/+$/g, "");
+    }
+
+    function getQrSizeInch() {
+      const raw = Number.parseFloat(qrSizeInput.value);
+      if (!Number.isFinite(raw) || raw <= 0) {
+        return QR_DEFAULT_INCH;
+      }
+
+      return Math.min(Math.max(raw, QR_MIN_INCH), 10);
+    }
+
+    function getQrPixelSize() {
+      return Math.max(30, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
+    }
+
+    function getQrCorrectLevel() {
+      const size = getQrSizeInch();
+      if (size <= 0.15) return QRCode.CorrectLevel.L;
+      if (size <= 0.35) return QRCode.CorrectLevel.M;
+      if (size <= 0.75) return QRCode.CorrectLevel.Q;
+      return QRCode.CorrectLevel.H;
+    }
+
+    function syncQrSizeInput() {
+      const value = getQrSizeInch().toFixed(1);
+      qrSizeInput.value = value;
+      qrSizeRange.value = value;
+    }
+
+    function isConfigComplete(config) {
+      return Boolean(
+        config.accountId &&
+        config.bucketName &&
+        config.accessKeyId &&
+        config.secretAccessKey &&
+        config.publicBaseUrl
+      );
+    }
+
+    function buildAwsClient(config) {
+      return new AwsClient({
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+        service: "s3",
+        region: "auto"
+      });
+    }
+
+    function getApiBaseUrl() {
+      return `https://${appState.config.accountId}.r2.cloudflarestorage.com/${encodeURIComponent(appState.config.bucketName)}`;
+    }
+
+    function getObjectApiUrl(key) {
+      const encodedKey = key.split("/").map((part) => encodeURIComponent(part)).join("/");
+      return `${getApiBaseUrl()}/${encodedKey}`;
+    }
+
+    async function r2Fetch(url, options = {}) {
+      return appState.awsClient.fetch(url, options);
+    }
+
+    async function readErrorMessage(response) {
+      try {
+        const text = await response.text();
+        if (!text) return `${response.status} ${response.statusText}`;
+        const xml = new DOMParser().parseFromString(text, "application/xml");
+        const message = xml.querySelector("Message")?.textContent?.trim();
+        return message || text;
+      } catch {
+        return `${response.status} ${response.statusText}`;
+      }
+    }
+
+    async function ensureOk(response, fallbackMessage) {
+      if (response.ok) return response;
+      const message = await readErrorMessage(response);
+      throw new Error(message || fallbackMessage);
+    }
+
+    function parseListObjectsXml(xmlText) {
+      const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+      const contents = Array.from(xml.querySelectorAll("Contents"));
+      const files = contents.map((entry) => {
+        const key = entry.querySelector("Key")?.textContent || "";
+        const size = Number(entry.querySelector("Size")?.textContent || 0);
+        const lastModified = entry.querySelector("LastModified")?.textContent || new Date().toISOString();
+        return {
+          key,
+          name: key.split("/").pop(),
+          size,
+          lastModified,
+          publicUrl: getPublicFileUrl(key)
+        };
+      }).filter((file) => file.key && !file.key.endsWith("/"));
+
+      return {
+        files,
+        isTruncated: xml.querySelector("IsTruncated")?.textContent === "true",
+        nextContinuationToken: xml.querySelector("NextContinuationToken")?.textContent || ""
+      };
+    }
+
+    function buildDeleteObjectsXml(files) {
+      const objectRows = files.map((file) => `<Object><Key>${escapeXml(file.key)}</Key></Object>`).join("");
+      return `<?xml version="1.0" encoding="UTF-8"?><Delete>${objectRows}<Quiet>false</Quiet></Delete>`;
+    }
+
+    function escapeXml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&apos;");
+    }
+
+    function loadFixedConfig() {
+      appState.config = {
+        ...FIXED_R2_CONFIG,
+        publicBaseUrl: normalizeBaseUrl(FIXED_R2_CONFIG.publicBaseUrl),
+        prefix: normalizePrefix(FIXED_R2_CONFIG.prefix)
+      };
+      appState.awsClient = buildAwsClient(appState.config);
+      connectionStatus.textContent = "Ready";
+    }
+
+    function getPublicFileUrl(key) {
+      const base = normalizeBaseUrl(appState.config.publicBaseUrl);
+      const encodedKey = key.split("/").map((part) => encodeURIComponent(part)).join("/");
+      return `${base}/${encodedKey}`;
+    }
+
+    function buildObjectKey(fileName) {
+      const cleanName = fileName.replace(/[^\w.\-() ]+/g, "-").replace(/\s+/g, " ").trim();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const prefix = normalizePrefix(appState.config.prefix);
+      const key = `${timestamp}-${cleanName}`;
+      return prefix ? `${prefix}/${key}` : key;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const value = bytes / (1024 ** index);
+      return `${value.toFixed(value >= 100 || index === 0 ? 0 : 1)} ${units[index]}`;
+    }
+
+    function formatDate(value) {
+      if (!value) return "Unknown";
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }).format(new Date(value));
+    }
+
+    function getFileTypeLabel(file) {
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith(".pdf")) return "PDF";
+      if (/\.(png|jpg|jpeg|webp|gif|svg)$/.test(lower)) return "Image";
+      if (/\.(doc|docx)$/.test(lower)) return "Document";
+      if (/\.(xls|xlsx|csv)$/.test(lower)) return "Sheet";
+      if (/\.(ppt|pptx)$/.test(lower)) return "Presentation";
+      if (/\.(zip|rar|7z)$/.test(lower)) return "Archive";
+      return "File";
+    }
+
+    function updateStats() {
+      filesLoadedStat.textContent = String(appState.files.length);
+      selectedCountStat.textContent = String(appState.selectedKeys.size);
+      storageUsedStat.textContent = formatBytes(appState.files.reduce((sum, file) => sum + (file.size || 0), 0));
+      bulkSummary.textContent = `${appState.selectedKeys.size} files selected`;
+      masterCheckbox.checked = appState.filteredFiles.length > 0 && appState.filteredFiles.every((file) => appState.selectedKeys.has(file.key));
+      deleteSelectedBtn.disabled = appState.selectedKeys.size === 0;
+    }
+
+    function setProgress(percent, text = "") {
+      progressShell.classList.add("visible");
+      progressBar.style.width = `${percent}%`;
+      progressText.textContent = text || `Uploading ${percent}%`;
+    }
+
+    function resetProgress() {
+      progressBar.style.width = "0%";
+      progressText.textContent = "Uploading 0%";
+      progressShell.classList.remove("visible");
+    }
+
+    function resetQrPreview() {
+      appState.selectedFile = null;
+      localStorage.removeItem(STORAGE_KEYS.selectedFile);
+      selectedFileTag.textContent = "No file selected";
+      selectedTypeTag.textContent = "Direct open mode";
+      timestampTag.textContent = "Awaiting upload";
+      selectedLinkBox.textContent = "Public file link will appear here.";
+      qrCodeMount.innerHTML = "<p class='hint'>Upload ya select a file to generate QR automatically.</p>";
+      appState.lastRenderedDataUrl = "";
+    }
+
+    function renderQrForFile(file) {
+      appState.selectedFile = file;
+      writeJSON(STORAGE_KEYS.selectedFile, { key: file.key });
+      selectedFileTag.textContent = file.name;
+      selectedTypeTag.textContent = getFileTypeLabel(file);
+      timestampTag.textContent = formatDate(file.lastModified);
+      selectedLinkBox.textContent = file.publicUrl;
+
+      qrCodeMount.innerHTML = "";
+      const mount = document.createElement("div");
+      qrCodeMount.appendChild(mount);
+      const qrSizePx = getQrPixelSize();
+      const qrTargetUrl = file.publicUrl;
+
+      const qr = new QRCode(mount, {
+        text: qrTargetUrl,
+        width: qrSizePx,
+        height: qrSizePx,
+        colorDark: "#102542",
+        colorLight: "#ffffff",
+        correctLevel: getQrCorrectLevel()
+      });
+
+      window.setTimeout(() => {
+        const canvas = mount.querySelector("canvas");
+        const image = mount.querySelector("img");
+        appState.lastRenderedDataUrl = canvas?.toDataURL("image/png") || image?.src || "";
+      }, 100);
+    }
+
+    function applyFilters() {
+      const term = searchInput.value.trim().toLowerCase();
+      const sort = sortFilter.value;
+
+      let rows = [...appState.files];
+      if (term) {
+        rows = rows.filter((file) => file.name.toLowerCase().includes(term) || file.key.toLowerCase().includes(term));
+      }
+
+      rows.sort((a, b) => {
+        switch (sort) {
+          case "oldest":
+            return new Date(a.lastModified) - new Date(b.lastModified);
+          case "name-asc":
+            return a.name.localeCompare(b.name);
+          case "name-desc":
+            return b.name.localeCompare(a.name);
+          case "size-asc":
+            return (a.size || 0) - (b.size || 0);
+          case "size-desc":
+            return (b.size || 0) - (a.size || 0);
+          case "newest":
+          default:
+            return new Date(b.lastModified) - new Date(a.lastModified);
+        }
+      });
+
+      appState.filteredFiles = rows;
+      renderFileTable();
+      updateStats();
+    }
+
+    function renderFileTable() {
+      if (!appState.filteredFiles.length) {
+        filesTableBody.innerHTML = `
+          <tr>
+            <td colspan="7" class="empty-state">
+              <strong>No matching files</strong>
+              <p class="hint">Upload a file or adjust the search and sorting filters.</p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      filesTableBody.innerHTML = "";
+
+      appState.filteredFiles.forEach((file) => {
+        const row = document.createElement("tr");
+        row.className = appState.selectedFile?.key === file.key ? "active" : "";
+        row.innerHTML = `
+          <td><input type="checkbox" ${appState.selectedKeys.has(file.key) ? "checked" : ""} aria-label="Select ${file.name}"></td>
+          <td>
+            <strong>${escapeHtml(file.name)}</strong>
+            <div class="hint">${escapeHtml(file.key)}</div>
+          </td>
+          <td>${getFileTypeLabel(file)}</td>
+          <td>${formatBytes(file.size || 0)}</td>
+          <td>${formatDate(file.lastModified)}</td>
+          <td><a href="${file.publicUrl}" target="_blank" rel="noopener noreferrer">${truncate(file.publicUrl, 46)}</a></td>
+          <td>
+            <div class="table-actions">
+              <button class="table-action" type="button" data-action="qr">QR</button>
+              <button class="table-action" type="button" data-action="open">Open</button>
+              <button class="table-action" type="button" data-action="copy">Copy</button>
+              <button class="table-action danger" type="button" data-action="delete">Delete</button>
+            </div>
+          </td>
+        `;
+
+        const checkbox = row.querySelector("input[type='checkbox']");
+        checkbox.addEventListener("change", (event) => {
+          if (event.target.checked) {
+            appState.selectedKeys.add(file.key);
+          } else {
+            appState.selectedKeys.delete(file.key);
+          }
+          updateStats();
+        });
+
+        row.querySelector("[data-action='qr']").addEventListener("click", () => {
+          renderQrForFile(file);
+          renderFileTable();
+        });
+
+        row.querySelector("[data-action='open']").addEventListener("click", () => {
+          window.open(file.publicUrl, "_blank", "noopener,noreferrer");
+        });
+
+        row.querySelector("[data-action='copy']").addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(file.publicUrl);
+            showToast("Public link copied", "success");
+          } catch {
+            showToast("Clipboard access failed", "error");
+          }
+        });
+
+        row.querySelector("[data-action='delete']").addEventListener("click", () => {
+          confirmDelete([file], `Delete ${file.name}`);
+        });
+
+        filesTableBody.appendChild(row);
+      });
+    }
+
+    function truncate(value, maxLength = 72) {
+      return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    async function testConnection() {
+      connectionStatus.textContent = "Checking...";
+
+      try {
+        const response = await r2Fetch(getApiBaseUrl(), {
+          method: "HEAD"
+        });
+        await ensureOk(response, "Connection failed");
+        connectionStatus.textContent = "Connected";
+        showToast("R2 bucket connection successful", "success");
+      } catch (error) {
+        connectionStatus.textContent = "Connection failed";
+        showToast(error.message || "Connection failed", "error");
+      }
+    }
+
+    async function refreshFiles() {
+      refreshBtn.disabled = true;
+      connectionStatus.textContent = "Loading files...";
+
+      try {
+        const files = [];
+        let continuationToken;
+
+        do {
+          const params = new URLSearchParams({
+            "list-type": "2"
+          });
+          if (appState.config.prefix) {
+            params.set("prefix", appState.config.prefix);
+          }
+          if (continuationToken) {
+            params.set("continuation-token", continuationToken);
+          }
+
+          const response = await r2Fetch(`${getApiBaseUrl()}?${params.toString()}`, {
+            method: "GET"
+          });
+          await ensureOk(response, "Could not load files");
+          const xmlText = await response.text();
+          const parsed = parseListObjectsXml(xmlText);
+          files.push(...parsed.files);
+          continuationToken = parsed.isTruncated ? parsed.nextContinuationToken : undefined;
+        } while (continuationToken);
+
+        appState.files = files;
+        appState.selectedKeys = new Set([...appState.selectedKeys].filter((key) => files.some((file) => file.key === key)));
+        connectionStatus.textContent = "Connected";
+        rehydrateSelectedFile();
+        applyFilters();
+        showToast("R2 files refreshed", "success");
+      } catch (error) {
+        connectionStatus.textContent = "Refresh failed";
+        showToast(error.message || "Could not load files", "error");
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    function rehydrateSelectedFile() {
+      const saved = readJSON(STORAGE_KEYS.selectedFile, null);
+      if (!saved?.key) {
+        if (appState.files.length > 0 && !appState.selectedFile) {
+          renderQrForFile(appState.files[0]);
+        }
+        return;
+      }
+
+      const found = appState.files.find((file) => file.key === saved.key);
+      if (found) {
+        renderQrForFile(found);
+      } else if (appState.files.length > 0) {
+        renderQrForFile(appState.files[0]);
+      } else {
+        resetQrPreview();
+      }
+    }
+
+    async function uploadFile() {
+      const file = fileInput.files?.[0];
+      if (!file) {
+        showToast("Choose a file first", "warning");
+        return;
+      }
+
+      uploadBtn.disabled = true;
+
+      try {
+        const customName = customNameInput.value.trim();
+        const rawName = customName || file.name;
+        const ext = rawName.includes(".") ? "" : (file.name.includes(".") ? `.${file.name.split(".").pop()}` : "");
+        const finalName = `${rawName}${ext}`;
+        const key = buildObjectKey(finalName);
+        const contentType = file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+        const contentDisposition = `inline; filename="${finalName.replaceAll('"', "")}"`;
+
+        setProgress(20, "Preparing upload...");
+        const response = await r2Fetch(getObjectApiUrl(key), {
+          method: "PUT",
+          body: file,
+          headers: {
+            "content-type": contentType,
+            "content-disposition": contentDisposition
+          }
+        });
+        await ensureOk(response, "Upload failed");
+
+        setProgress(100, "Upload complete");
+        fileInput.value = "";
+        customNameInput.value = "";
+        lastUploadStat.textContent = finalName;
+        await refreshFiles();
+
+        const uploaded = appState.files.find((item) => item.key === key);
+        if (uploaded) {
+          renderQrForFile(uploaded);
+        }
+
+        showToast("File uploaded to R2 and QR generated", "success");
+      } catch (error) {
+        showToast(error.message || "Upload failed", "error");
+      } finally {
+        uploadBtn.disabled = false;
+        window.setTimeout(resetProgress, 500);
+      }
+    }
+
+    function confirmDelete(files, title) {
+      const count = files.length;
+      const fileList = files
+        .slice(0, 4)
+        .map((file) => `<li>${escapeHtml(file.name)}</li>`)
+        .join("");
+      const extra = count > 4 ? `<li>and ${count - 4} more...</li>` : "";
+
+      modalRoot.innerHTML = `
+        <div class="modal-backdrop">
+          <div class="modal-card">
+            <div class="stack">
+              <div class="panel-title">${escapeHtml(title)}</div>
+              <div class="alert warning">
+                <strong>This action is irreversible.</strong>
+                <p class="hint">Type DELETE to permanently remove ${count} file${count > 1 ? "s" : ""} from Cloudflare R2.</p>
+              </div>
+              <div class="alert info">
+                <strong>Files to remove</strong>
+                <ul>${fileList}${extra}</ul>
+              </div>
+              <div class="field-group">
+                <label for="confirmDeleteInput">Type DELETE to confirm</label>
+                <input id="confirmDeleteInput" class="input" type="text" placeholder="Type DELETE">
+              </div>
+            </div>
+            <div class="inline-actions" style="margin-top: 1rem;">
+              <button id="cancelDeleteBtn" class="action-btn secondary" type="button">Cancel</button>
+              <button id="confirmDeleteBtn" class="action-btn danger" type="button">Permanently Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+      modalRoot.classList.remove("hidden");
+
+      document.getElementById("cancelDeleteBtn").addEventListener("click", closeModal);
+      document.getElementById("confirmDeleteBtn").addEventListener("click", async () => {
+        const input = document.getElementById("confirmDeleteInput");
+        if (input.value.trim() !== "DELETE") {
+          showToast("Type DELETE to continue", "warning");
+          return;
+        }
+        await deleteFiles(files);
+        closeModal();
+      });
+    }
+
+    function closeModal() {
+      modalRoot.classList.add("hidden");
+      modalRoot.innerHTML = "";
+    }
+
+    async function deleteFiles(files) {
+      if (!files.length) {
+        showToast("Select at least one file", "warning");
+        return;
+      }
+
+      try {
+        if (files.length === 1) {
+          const response = await r2Fetch(getObjectApiUrl(files[0].key), {
+            method: "DELETE"
+          });
+          await ensureOk(response, "Delete failed");
+        } else {
+          const response = await r2Fetch(`${getApiBaseUrl()}?delete`, {
+            method: "POST",
+            body: buildDeleteObjectsXml(files),
+            headers: {
+              "content-type": "application/xml"
+            }
+          });
+          await ensureOk(response, "Bulk delete failed");
+        }
+
+        files.forEach((file) => appState.selectedKeys.delete(file.key));
+        if (appState.selectedFile && files.some((file) => file.key === appState.selectedFile.key)) {
+          appState.selectedFile = null;
+        }
+
+        await refreshFiles();
+        if (!appState.files.length) {
+          resetQrPreview();
+        }
+
+        showToast(`${files.length} file${files.length > 1 ? "s" : ""} deleted`, "success");
+      } catch (error) {
+        showToast(error.message || "Delete failed", "error");
+      }
+    }
+
+    async function copySelectedLink() {
+      if (!appState.selectedFile?.publicUrl) {
+        showToast("Select a file first", "warning");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(appState.selectedFile.publicUrl);
+        showToast("Public link copied", "success");
+      } catch {
+        showToast("Clipboard access failed", "error");
+      }
+    }
+
+    function openSelectedFile() {
+      if (!appState.selectedFile?.publicUrl) {
+        showToast("Select a file first", "warning");
+        return;
+      }
+      window.open(appState.selectedFile.publicUrl, "_blank", "noopener,noreferrer");
+    }
+
+    function downloadQrPng() {
+      if (!appState.lastRenderedDataUrl) {
+        showToast("Generate or select a file QR first", "warning");
+        return;
+      }
+
+      const anchor = document.createElement("a");
+      anchor.href = appState.lastRenderedDataUrl;
+      anchor.download = `qr-r2-file-manager-${getQrSizeInch().toFixed(1).replace(".", "_")}in.png`;
+      anchor.click();
+    }
+
+    function openPublicRoot() {
+      const base = normalizeBaseUrl(appState.config.publicBaseUrl);
+      if (!base) {
+        showToast("Enter the public base URL first", "warning");
+        return;
+      }
+      window.open(base, "_blank", "noopener,noreferrer");
+    }
+
+    function initEventListeners() {
+      themeToggle.addEventListener("click", () => {
+        setTheme(document.body.classList.contains("dark") ? "light" : "dark");
+      });
+
+      refreshBtn.addEventListener("click", refreshFiles);
+      uploadBtn.addEventListener("click", uploadFile);
+      openPublicRootBtn.addEventListener("click", openPublicRoot);
+      searchInput.addEventListener("input", applyFilters);
+      sortFilter.addEventListener("change", applyFilters);
+      copyBtn.addEventListener("click", copySelectedLink);
+      openLinkBtn.addEventListener("click", openSelectedFile);
+      downloadPngBtn.addEventListener("click", downloadQrPng);
+      qrSizeInput.addEventListener("input", () => {
+        syncQrSizeInput();
+        if (appState.selectedFile) {
+          renderQrForFile(appState.selectedFile);
+          renderFileTable();
+        }
+      });
+      qrSizeRange.addEventListener("input", () => {
+        qrSizeInput.value = qrSizeRange.value;
+        syncQrSizeInput();
+        if (appState.selectedFile) {
+          renderQrForFile(appState.selectedFile);
+          renderFileTable();
+        }
+      });
+
+      selectAllBtn.addEventListener("click", () => {
+        appState.filteredFiles.forEach((file) => appState.selectedKeys.add(file.key));
+        renderFileTable();
+        updateStats();
+      });
+
+      clearSelectionBtn.addEventListener("click", () => {
+        appState.selectedKeys.clear();
+        renderFileTable();
+        updateStats();
+      });
+
+      deleteSelectedBtn.addEventListener("click", () => {
+        const files = appState.files.filter((file) => appState.selectedKeys.has(file.key));
+        confirmDelete(files, "Delete selected files");
+      });
+
+      masterCheckbox.addEventListener("change", (event) => {
+        if (event.target.checked) {
+          appState.filteredFiles.forEach((file) => appState.selectedKeys.add(file.key));
+        } else {
+          appState.filteredFiles.forEach((file) => appState.selectedKeys.delete(file.key));
+        }
+        renderFileTable();
+        updateStats();
+      });
+
+      dropZone.addEventListener("click", () => fileInput.click());
+      dropZone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropZone.style.background = "rgba(59, 130, 246, 0.12)";
+      });
+      dropZone.addEventListener("dragleave", () => {
+        dropZone.style.background = "";
+      });
+      dropZone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropZone.style.background = "";
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return;
+        try {
+          const transfer = new DataTransfer();
+          Array.from(files).forEach((file) => transfer.items.add(file));
+          fileInput.files = transfer.files;
+        } catch {
+          showToast("File selected. If upload button stays disabled, choose the file once manually.", "warning");
+        }
+        const first = files[0];
+        showToast(`${first.name} selected`, "success");
+      });
+      fileInput.addEventListener("change", () => {
+        const first = fileInput.files?.[0];
+        if (first) {
+          showToast(`${first.name} selected`, "success");
+        }
+      });
+    }
+
+    async function initApp() {
+      if (AUTO_OPEN_TARGET) {
+        return;
+      }
+      initTheme();
+      loadFixedConfig();
+      syncQrSizeInput();
+      initEventListeners();
+      resetQrPreview();
+      applyFilters();
+      await testConnection();
+      await refreshFiles();
+    }
+
+    if (!AUTO_OPEN_TARGET) {
+      window.addEventListener("load", initApp);
+    }
+  </script>
+</body>
+</html>

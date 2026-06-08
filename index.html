@@ -806,11 +806,11 @@
       <p class="hint" style="margin: 0.45rem 0 1rem;">Cloudflare R2 bucket par is tarah ka CORS rule helpful rahega. Agar page local file se khul raha ho to <code>null</code> origin bhi allow karna useful hota hai.</p>
       <pre class="code-block">[
   {
-    "AllowedOrigins": ["*", "null"],
-    "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
+    "AllowedOrigins": ["*", "null", "http://localhost:*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"],
     "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
+    "ExposeHeaders": ["ETag", "Content-Type", "Content-Length"],
+    "MaxAgeSeconds": 3600
   }
 ]</pre>
     </section>
@@ -977,10 +977,9 @@
 
     function getQrCorrectLevel() {
       const size = getQrSizeInch();
-      if (size <= 0.15) return QRCode.CorrectLevel.L;
-      if (size <= 0.35) return QRCode.CorrectLevel.M;
-      if (size <= 0.75) return QRCode.CorrectLevel.Q;
-      return QRCode.CorrectLevel.H;
+      // Use Medium level for faster "milli-second" detection by cameras
+      // High level makes QR too dense for long direct URLs
+      return QRCode.CorrectLevel.M;
     }
 
     function syncQrSizeInput() {

@@ -628,12 +628,23 @@
 
             <div class="file-link-box" id="selectedLinkBox">Public PDF link will appear here.</div>
 
-            <div class="field-group">
-              <label for="qrSizeInput">QR Size (inch)</label>
-              <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.05" value="1">
-              <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
-              <p class="hint">Print-friendly output ke liye 600 DPI basis use ho raha hai. Chhote QR ke liye QR text jitna short hoga, scan utna better hoga.</p>
+            <div class="field-grid">
+              <div class="field-group">
+                <label for="qrSizeInput">QR Size (inch)</label>
+                <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.01" value="1">
+                <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
+              </div>
+              <div class="field-group">
+                <label for="qrLevelSelect">Scan Precision (Density)</label>
+                <select id="qrLevelSelect" class="select">
+                  <option value="L">Low (Best for 0.05" - 0.1" size)</option>
+                  <option value="M" selected>Medium (Standard)</option>
+                  <option value="Q">Quartile (High Detail)</option>
+                  <option value="H">High (Max Recovery)</option>
+                </select>
+              </div>
             </div>
+            <p class="hint">Tiny sizes (0.1") ke liye hamesha 'Low' density select karein taaki dots bade rahein aur scan fast ho.</p>
 
             <div class="inline-actions">
               <button id="openLinkBtn" class="action-btn primary" type="button">Open PDF</button>
@@ -864,6 +875,7 @@
     const selectedLinkBox = document.getElementById("selectedLinkBox");
     const qrSizeInput = document.getElementById("qrSizeInput");
     const qrSizeRange = document.getElementById("qrSizeRange");
+    const qrLevelSelect = document.getElementById("qrLevelSelect");
     const openLinkBtn = document.getElementById("openLinkBtn");
     const copyBtn = document.getElementById("copyBtn");
     const downloadPngBtn = document.getElementById("downloadPngBtn");
@@ -972,13 +984,15 @@
     }
 
     function getQrPixelSize() {
-      return Math.max(30, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
+      // Multiplier increased for ultra-high resolution buffer
+      return Math.max(120, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
     }
 
     function getQrCorrectLevel() {
-      const size = getQrSizeInch();
-      // Use Medium level for faster "milli-second" detection by cameras
-      // High level makes QR too dense for long direct URLs
+      const level = qrLevelSelect.value;
+      if (level === "L") return QRCode.CorrectLevel.L;
+      if (level === "Q") return QRCode.CorrectLevel.Q;
+      if (level === "H") return QRCode.CorrectLevel.H;
       return QRCode.CorrectLevel.M;
     }
 
@@ -1583,6 +1597,12 @@
       downloadPngBtn.addEventListener("click", downloadQrPng);
       qrSizeInput.addEventListener("input", () => {
         syncQrSizeInput();
+        if (appState.selectedFile) {
+          renderQrForFile(appState.selectedFile);
+          renderFileTable();
+        }
+      });
+      qrLevelSelect.addEventListener("change", () => {
         if (appState.selectedFile) {
           renderQrForFile(appState.selectedFile);
           renderFileTable();
